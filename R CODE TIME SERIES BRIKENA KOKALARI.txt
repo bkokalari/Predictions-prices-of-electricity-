@@ -1,0 +1,258 @@
+
+library("readxl")
+data<-read_excel("C:\\Users\\Brikena Kokalari\\Dropbox\\electr.data.xlsx", col_names = T)
+data<-as.data.frame(data)
+summary(data)
+
+
+data[which.max(data$Price),]
+data = data[-27,]
+
+### CONVERT TO MONTHLY DATA
+
+library(dplyr)
+library(lubridate)
+
+summary <- data %>%
+  mutate(month = month(Date),
+         year = year(Date)) %>%
+  group_by(month, year) %>%
+  summarise(Price = mean(Price, na.rm=TRUE))
+
+library(tidyr)
+summary<-as.data.frame(summary)
+summary <- summary[order(summary$year, summary$month),]
+
+m<-ts(summary[,3], start=c(2010,7), frequency=12)
+
+m
+par(mfrow=c(1,1))
+plot(m,  xlab="Year", ylab="Avg Price of Electricity", 
+     main="Monthly Average price of Electricity, 2010-2018")
+#Obtain the frequency
+
+unique(cycle(m)) #
+
+#Obtain the years
+unique(floor(time(m)))
+
+class(m)
+
+#time series decomposition
+library(forecast)
+m %>%
+  stl(s.window="periodic") %>%
+  autoplot()
+
+m_elec<-stl(m, s.window="periodic")
+plot(m_elec)
+
+library(tseries)
+adf.test(m) # p-value > 0.05 indicates the TS is not stationary
+
+
+lm=log(m)  # compute the logarithm of the Electricity Price...doesn't too much
+ndiffs(na.omit(lm)) #R says 1 which is greater than 0
+#dm=diff((m), differences = 1, 1) 
+dlm=diff((lm), differences = 1, 1) 
+
+
+par(mfrow=c(3,1))
+plot.ts(m)
+plot.ts(lm)
+plot.ts(dlm)
+
+adf.test(dlm) ## p-value < 0.05 indicates the TS is stationary
+# Create a multiple plots 
+par(mfrow=c(3,2))       
+plot(m,type="l", col='red', lwd=1,main="Time Series plot of Electricity Price", ylab="Monthly price of electricity")
+hist(m, nclass=10, main="Histogram of Electricity Price")
+plot(lm,type="l", col='red', lwd=1,main="Log of Electricity Price", ylab="Log of Monthly price of electricity")
+hist(lm, nclass=10, main="Histogram of log of Electricity Price")
+plot(dlm,type="l", col='red', lwd=1,main="Differences of log of Electricity Price", ylab="diff of log Monthly price of electricity")
+hist(dlm, nclass=10, main="Histogram of differences of log of Electricity Price")
+
+
+
+# Create a multiple plots 
+par(mfrow=c(3,2))       
+acf(m, main="Time Series plot of Electricity Price", ylab="Monthly price of electricity")
+pacf(m, main="Histogram of Electricity Price")
+acf(lm, main="Log of Electricity Price", ylab="Log of Monthly price of electricity")
+pacf(lm, nclass=10, main="Histogram of log of Electricity Price")
+acf(dlm, main="Differences of log of Electricity Price", ylab="diff of log Monthly price of electricity")
+pacf(dlm, main="Histogram of differences of log of Electricity Price")
+
+
+
+#Show seasonality
+#This boxplot will show seasonality
+par(mfrow=c(1,1))
+boxplot(split(m, cycle(m)), names = month.abb, col = "gold")
+
+
+par(mfrow=c(1,2))  
+# Calculate, but not plot, acf
+acfpl <- acf(dlm, plot=FALSE)
+## Transform the lags from years to months
+acfpl$lag <- acfpl$lag * 12
+## Plot the acf 
+plot(acfpl, xlab="Lag (months)", main="ACF of differences of  log of Electricity Price")
+# Calculate, but not plot, pacf
+pacfpl <- pacf(dlm, plot=FALSE)
+## Transform the lags from years to months
+pacfpl$lag <- pacfpl$lag * 12
+## Plot the acf 
+plot(pacfpl, xlab="Lag (months)",main="PACF of differences of  log of Electricity Price")
+  
+
+library(forecast)
+autoarima<-auto.arima(dlm)
+mod_200<-arima(x = dlm, order = c(2 ,0, 0))
+mod_002<-arima(x = dlm, order = c(0, 0, 2))
+mod_001<-arima(x = dlm, order = c(0, 0, 1))
+mod_201<-arima(x = dlm, order = c(2, 0, 1))
+mod_100<-arima(x = dlm, order = c(1, 0, 0))
+mod_101<-arima(x = dlm, order = c(1, 0, 1))
+
+#FORECASTING ARIMA MODELS
+length(dlm)
+train <- window(dlm, start=c(2010,8), end=c(2017,12))
+test <- window(dlm, start=c(2018), end=c(2018,12))
+
+autoarima<-auto.arima(train)
+mod_200<-arima(x = train, order = c(2 ,0, 0))
+mod_002<-arima(x = train, order = c(0, 0, 2))
+mod_001<-arima(x = train, order = c(0, 0, 1))
+mod_201<-arima(x = train, order = c(2, 0, 1))
+mod_202<-arima(x = train, order = c(2, 0, 2))
+mod_101<-arima(x = train, order = c(1, 0, 1))
+# Forecast the model
+arima_predictedauto = forecast(autoarima)
+arima_predicted200 = forecast(mod_200)
+arima_predicted002 = forecast(mod_002)
+arima_predicted001 = forecast(mod_001)
+arima_predicted201 = forecast(mod_201)
+arima_predicted202 = forecast(mod_202)
+arima_predicted101 = forecast(mod_101)
+
+autoArima_acc<-accuracy(arima_predictedauto, test)
+Arima200_acc<-accuracy(arima_predicted200, test)
+Arima002_acc<-accuracy(arima_predicted002, test)
+Arima001_acc<-accuracy(arima_predicted001, test)
+Arima201_acc<-accuracy(arima_predicted201, test)
+Arima202_acc<-accuracy(arima_predicted202, test)
+Arima101_acc<-accuracy(arima_predicted101, test)
+
+
+autoArima_acc
+Arima200_acc
+Arima002_acc
+Arima001_acc
+Arima201_acc
+Arima202_acc
+Arima101_acc
+
+
+par(mfrow=c(2,2))
+plot(arima_predictedauto)
+lines(test,col="red")
+legend(2010, 0.8, lty=1, bty = "n", col="red", c("testData"))
+legend(2010, 0.7, lty=1, bty = "n", col="blue", c("AutoArima"))
+
+plot(arima_predicted200)
+lines(test,col="red")
+legend(2010, 0.8, lty=1, bty = "n", col="red", c("testData"))
+legend(2010, 0.7, lty=1, bty = "n", col="blue", c("Arima200"))
+
+plot(arima_predicted002)
+lines(test,col="red")
+legend(2010, 0.8, lty=1, bty = "n", col="red", c("testData"))
+legend(2010, 0.7, lty=1, bty = "n", col="blue", c("Arima002"))
+
+
+plot(arima_predicted201)
+lines(test,col="red")
+legend(2010, 0.8, lty=1, bty = "n", col="red", c("testData"))
+legend(2010, 0.7, lty=1, bty = "n", col="blue", c("Arima201"))
+
+
+
+acc1 = data.frame(autoArima_acc)
+acc2 = data.frame(Arima200_acc)
+acc3 = data.frame(Arima002_acc)
+acc4 = data.frame(Arima201_acc)
+
+
+
+#combine dataframes into a list
+lsAcc = list(acc1, acc2, acc3, acc4)
+dfAcc = do.call(what = rbind, args = lsAcc)
+dfAcc$rowPair = ceiling(1:8 * 0.5)
+
+
+#plot training set and testing set RMSE for 4 method 
+par(mfrow=c(1,1))  
+plot(0, cex=0, xlim=c(1,4), ylim=c(0,1), xlab="Methods", ylab="RMSE Score")
+points(x = dfAcc$rowPair[grepl(pattern = "Training", rownames(dfAcc))], 
+       y = dfAcc$RMSE[grepl(pattern = "Training", rownames(dfAcc))],
+       pch = 2, col="blue")
+points(x = dfAcc$rowPair[grepl(pattern = "Test", rownames(dfAcc))], 
+       y = dfAcc$RMSE[grepl(pattern = "Test", rownames(dfAcc))],
+       pch = 3, col="red")
+legend(1,0.99, pch=2, bty = "n",col="blue" ,c("trainData"))
+legend(1,0.90,pch=3, bty = "n",col="red" ,c("testData"))
+
+###Diagnostic checking step
+
+# Test of Autocorrelation of Residuals
+
+library(ggfortify)
+ggtsdiag(mod_200)
+
+acf(mod_200$residuals)
+pacf(mod_200$residuals)
+Box.test(mod_200$residuals, lag = 20, type='Ljung-Box')
+
+#Check normality using Q-Q plot residuals
+qqnorm(residuals(mod_200))
+qqline(residuals(mod_200))
+shapiro.test(mod_200$residuals)
+
+#Check for stationarity of residuals
+residuals=mod_200$residuals
+adf.test(residuals^2, alternative ="stationary")
+
+par(mfrow=c(1,2))
+acf(residuals^2,  main="ACF of squared residuals")        
+pacf(residuals^2, main="PACF of squared residuals") 
+
+
+checkresiduals(mod_200) 
+
+###Forecasting step
+
+
+mod_200<-arima(x = dlm, order = c(2 ,0, 0))
+
+#print last value of dataseries
+print(last(m))#65.06532
+
+forecast(mod_200, h=6)
+
+jan2019<-exp(cumsum(0.005273956)  + log(65.06532))
+feb2019<-exp(cumsum(-0.001106549)  + log(jan2019))
+mar2019<-exp(cumsum(0.004872569) + log(feb2019))
+apr2019<-exp(cumsum(0.005402558) + log(mar2019))
+may2019<-exp(cumsum(0.003633302)  + log(apr2019))
+jun2019<-exp(cumsum(0.003853349 ) + log(may2019))
+
+
+jan2019
+feb2019
+mar2019
+apr2019
+may2019
+jun2019
+
+
